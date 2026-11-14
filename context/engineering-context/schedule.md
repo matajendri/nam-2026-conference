@@ -29,7 +29,7 @@ and a bound `?` to `args`:
 | param | clause |
 | --- | --- |
 | `day` | `s.day = ?` |
-| `trackSlug` | `t.slug = ?` |
+| `trackSlug` | `t.slug IN (?, …)` — comma-separated, any of them matches |
 | `venueId` / `roomId` | `v.id = ?` / `r.id = ?` |
 | `level` / `format` | `s.level = ?` / `s.format = ?` |
 | `q` | `LIKE %q%` on title, abstract, subtitle, or any speaker name (`EXISTS`) |
@@ -69,7 +69,8 @@ The list groups sessions by `startsAt` into `slot-<HH:MM>` sections of
 `SessionCard`s in a `grid-flow-row-dense` auto-fit grid. The filter rail
 (`aside`, hidden below `lg` until the Filters button toggles `railOpen`) holds
 `search-input`, `starred-count` (= `reservations.size`, the agenda count), day
-buttons `tab-<date>`, track pills, and `Select`s for venue/level/format/topic.
+buttons `tab-<date>`, track pills (each toggles on its own, `aria-pressed`;
+several make `?track=a,b`, in track order, and none is All), and `Select`s for venue/level/format/topic.
 Below `lg` the open rail is compact so the first card stays in view at 393×659: days in one
 row (no weekday or count), tracks in one scrolling row (the Day and Track headings turn screen-reader-only), selects in two columns, and the
 My agenda card is desktop-only (`starred-count` stays in the DOM, `hidden lg:block`);
@@ -130,10 +131,10 @@ room/amenities/step-free card, topic chips linking `/schedule?tag=`, `alsoInRoom
 - Seat buttons sit inside a `Link`; they `preventDefault` so a click toggles rather than navigates.
 - `starred-count` is the agenda count despite its name — tests rely on the id.
 - `competing`/`alsoInRoom` items lack `speakers`, so the row variant must not need them.
-- **A filter that takes several values** keeps one URL key and one API param,
+- **A filter that takes several values** (track is the one that does) keeps one URL key and one API param,
   comma-separated (`?track=a,b` → `trackSlug=a,b`; `qs()` passes the string
   through), and `sessions.js` splits it into `IN (?, ?)`. One value is then the
-  same query as today, so existing links and `tests/api/endpoints.test.js` hold;
+  same query as a single-value filter, so existing links and `tests/api/endpoints.test.js` hold;
   `speakers.js` reads its own params. A toggle control exposes `aria-pressed`. A
   test of it adds a value *and* removes one, checking `result-count` against the
   API's counts each time — a list that only ever grows passes a test that never

@@ -35,6 +35,9 @@ before(async () => {
     venue: boot.venues[0].id,
     room: boot.rooms[0].id,
     track: boot.tracks[0].slug,
+    // two tracks that both run on Day 2, for the several-tracks filter
+    ...(([a, b]) => ({ dayTrack: a, otherTrack: b }))(
+      [...new Set(sessions.filter((s) => s.day === days[1]).map((s) => s.track.slug))]),
     topic: boot.tags.find((t) => t.kind === 'topic').slug,
     level: boot.levels[0].name,
     format: boot.formats[0].name,
@@ -72,6 +75,7 @@ function filtered() {
   return [
     `/sessions?day=${days[1]}`,
     `/sessions?trackSlug=${ids.track}`,
+    `/sessions?trackSlug=${ids.dayTrack},${ids.otherTrack}`,
     `/sessions?tagSlug=${ids.topic}`,
     `/sessions?venueId=${ids.venue}`,
     `/sessions?roomId=${ids.room}`,
@@ -197,5 +201,38 @@ describe('Every endpoint answers', () => {
 
     const missing = mounted.filter((route) => !covered.includes(route));
     assert.deepEqual(missing, [], `untested endpoints: ${missing.join(', ')}`);
+  });
+});
+
+describe('Filtering sessions by several tracks', () => {
+  const idsOf = (list) => list.map((s) => s.id).sort((a, b) => a - b);
+  const onDay = (extra) => api.json(`/sessions?day=${days[1]}${extra}`);
+
+  test('two tracks return exactly the sessions of each, and no others', async () => {
+    const a = await onDay(`&trackSlug=${ids.dayTrack}`);
+    const b = await onDay(`&trackSlug=${ids.otherTrack}`);
+    assert.ok(a.length > 0 && b.length > 0, 'both tracks need sessions on Day 2 for this to prove anything');
+
+    const both = await onDay(`&trackSlug=${ids.dayTrack},${ids.otherTrack}`);
+    assert.deepEqual(idsOf(both), idsOf([...a, ...b]));
+    assert.ok(both.every((s) => [ids.dayTrack, ids.otherTrack].includes(s.track.slug)));
+  });
+
+  test('one track is the same query as before', async () => {
+    const one = await onDay(`&trackSlug=${ids.dayTrack}`);
+    assert.ok(one.length > 0);
+    assert.ok(one.every((s) => s.track.slug === ids.dayTrack));
+    assert.deepEqual(idsOf(await onDay(`&trackSlug=${ids.dayTrack},`)), idsOf(one), 'an empty part is ignored');
+  });
+
+  test('the other filters still narrow on top of the tracks', async () => {
+    const both = await onDay(`&trackSlug=${ids.dayTrack},${ids.otherTrack}`);
+    assert.ok(both.every((s) => s.day === days[1]));
+    const level = both[0].level;
+    const narrowed = await onDay(`&trackSlug=${ids.dayTrack},${ids.otherTrack}&level=${encodeURIComponent(level)}`);
+    assert.ok(narrowed.length > 0 && narrowed.length <= both.length);
+    assert.ok(narrowed.every((s) => s.level === level));
+    const bothIds = new Set(both.map((s) => s.id));
+    assert.ok(narrowed.every((s) => bothIds.has(s.id)));
   });
 });

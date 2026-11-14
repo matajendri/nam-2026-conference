@@ -63,6 +63,54 @@ test.describe('Schedule', () => {
     await expect(cards.first()).toContainText('Foundry');
   });
 
+  test('several tracks can be picked at once, and each can be dropped again', async ({ page, request }) => {
+    const days = await conferenceDays();
+    const day = days[1];
+    const { tracks } = await (await request.get(`${API}/bootstrap`)).json();
+    const countFor = async (slugs) =>
+      (await (await request.get(`${API}/sessions?day=${day}&trackSlug=${slugs.join(',')}`)).json()).length;
+    const running = [];
+    for (const t of tracks) if (await countFor([t.slug]) > 0) running.push(t);
+    const [a, b] = running;
+    test.skip(!b, 'needs two tracks with sessions on Day 2');
+    const pill = (t) => page.getByRole('button', { name: t.shortName ?? t.name, exact: true });
+    const all = page.getByRole('button', { name: 'All', exact: true });
+    const count = page.getByTestId('result-count');
+    const openRail = async () => {
+      const btn = page.getByRole('button', { name: /^Filters/ });
+      if (await btn.isVisible()) await btn.click();
+    };
+
+    await visit(page, `/schedule?day=${day}&view=list`);
+    await waitForResults(page);
+    await openRail();
+    await expect(all).toHaveAttribute('aria-pressed', 'true');
+
+    await pill(a).click();
+    await expect(count).toHaveText(new RegExp(`^${await countFor([a.slug])} sessions?$`));
+
+    await pill(b).click();
+    await expect(count).toHaveText(new RegExp(`^${await countFor([a.slug, b.slug])} sessions?$`));
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'true');
+    await expect(pill(b)).toHaveAttribute('aria-pressed', 'true');
+    await expect(all).toHaveAttribute('aria-pressed', 'false');
+    await expect(page).toHaveURL(new RegExp(`track=${a.slug}(%2C|,)${b.slug}`));
+
+    await page.reload();
+    await waitForResults(page);
+    await openRail();
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'true');
+    await expect(pill(b)).toHaveAttribute('aria-pressed', 'true');
+
+    await pill(a).click();
+    await expect(count).toHaveText(new RegExp(`^${await countFor([b.slug])} sessions?$`));
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'false');
+
+    await pill(b).click();
+    await expect(all).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).not.toHaveURL(/track=/);
+  });
+
   test('an impossible filter combination shows the empty state', async ({ page }) => {
     await visit(page, '/schedule?q=zzzznotathing&view=list');
     await expect(page.getByRole('heading', { name: /No sessions match/i })).toBeVisible();
