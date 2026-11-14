@@ -35,7 +35,9 @@ sessionsRouter.get('/', (req, res) => {
   const args = [];
 
   if (day) { where.push('s.day = ?'); args.push(day); }
-  if (trackSlug) { where.push('t.slug = ?'); args.push(trackSlug); }
+  // Several tracks arrive comma-separated (`a,b`) and match any of them.
+  const tracks = String(trackSlug ?? '').split(',').filter(Boolean);
+  if (tracks.length) { where.push(`t.slug IN (${tracks.map(() => '?').join(', ')})`); args.push(...tracks); }
   if (venueId) { where.push('v.id = ?'); args.push(venueId); }
   if (roomId) { where.push('r.id = ?'); args.push(roomId); }
   if (level) { where.push('s.level = ?'); args.push(level); }
